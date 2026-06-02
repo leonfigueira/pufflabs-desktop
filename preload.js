@@ -1,4 +1,4 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 const { createBrowserClient } = require("@supabase/ssr");
 
 const SUPABASE_URL = "https://ogubjsuqdsbdewhwlkit.supabase.co";
@@ -17,5 +17,29 @@ contextBridge.exposeInMainWorld("pufflabsAuth", {
     } catch (e) {
       return "ex:" + String(e);
     }
+  },
+});
+
+contextBridge.exposeInMainWorld("__PUFFLABS_DESKTOP__", true);
+
+contextBridge.exposeInMainWorld("__PUFFLABS_FRAMELESS__", true);
+
+// True ONLY in the frameless time-tracker pop-out window (main.js passes
+// --pufflabs-frameless-popout via additionalArguments). The web reserves
+// traffic-light clearance + a drag strip for just that window.
+contextBridge.exposeInMainWorld(
+  "__PUFFLABS_POPOUT_FRAMELESS__",
+  process.argv.includes("--pufflabs-frameless-popout")
+);
+
+// Menu-bar (tray) timer bridge. The renderer holds the auth session +
+// the timer store, so it pushes elapsed/project state to the main
+// process (which paints the tray), and listens for tray menu clicks.
+contextBridge.exposeInMainWorld("pufflabsTray", {
+  update: (state) => { try { ipcRenderer.send("tray:timer", state); } catch (e) {} },
+  onCommand: (cb) => {
+    const handler = (_e, payload) => { try { cb(payload); } catch (e) {} };
+    ipcRenderer.on("tray:command", handler);
+    return () => { try { ipcRenderer.removeListener("tray:command", handler); } catch (e) {} };
   },
 });

@@ -51,6 +51,7 @@ async function handleDeepLink(url) {
 
 /* ---------- window ---------- */
 let win = null, tray = null, prefsWin = null, lastUnread = 0;
+let timerState = { running: false, label: "", projectName: "", projects: [] };
 function stayInApp(u) { try { const x = new URL(u); return x.origin === HOME_ORIGIN || x.hostname.endsWith("google.com") || x.hostname.endsWith("gstatic.com") || x.hostname.endsWith("supabase.co"); } catch (e) { return false; } }
 function showWindow() { if (!win) createWindow(); win.show(); win.focus(); if (app.dock) app.dock.show(); }
 
@@ -58,10 +59,25 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1320, height: 880, minWidth: 900, minHeight: 600, show: true,
     title: "PuffLabs", backgroundColor: "#030408",
+    titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 18 },
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false },
   });
   win.loadURL(APP_URL);
-  win.webContents.setWindowOpenHandler(({ url }) => { if (stayInApp(url)) return { action: "allow" }; shell.openExternal(url); return { action: "deny" }; });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!stayInApp(url)) { shell.openExternal(url); return { action: "deny" }; }
+    // Time-tracker pop-out: open it FRAMELESS like the main window (hidden
+    // title bar + traffic lights over the dark UI). The additionalArguments
+    // arg lets the web reserve clearance + a drag strip for just this window.
+    let timerPip = false;
+    try { const u = new URL(url); timerPip = u.pathname.startsWith("/timesheets/timer") || u.searchParams.get("pip") === "1"; } catch (e) {}
+    if (timerPip) {
+      return { action: "allow", overrideBrowserWindowOptions: {
+        backgroundColor: "#0c0a1a", titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 18 },
+        webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false, additionalArguments: ["--pufflabs-frameless-popout"] },
+      } };
+    }
+    return { action: "allow" };
+  });
   win.webContents.on("will-navigate", (e, url) => { if (!stayInApp(url)) { e.preventDefault(); shell.openExternal(url); } });
   win.webContents.on("did-navigate", (_e, url) => { try { if (new URL(url).pathname.startsWith("/login") && !loggingIn) startLogin(); } catch (e) {} });
   // Dock unread badge + bounce on increase (from the "(N) " title the web app sets).
@@ -84,17 +100,51 @@ function createTray() {
   tray.on("click", showWindow);
   updateTrayMenu();
 }
+function trayCommand(payload) {
+  if (win && !win.isDestroyed()) win.webContents.send("tray:command", payload);
+  showWindow();
+}
 function updateTrayMenu() {
   if (!tray) return;
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Open PuffLabs", click: showWindow },
-    { type: "separator" },
-    { label: "Preferences…", accelerator: "Cmd+,", click: openPrefs },
-    { label: "Check for Updates…", click: () => checkForUpdates(false) },
-    { type: "separator" },
-    { label: "Quit PuffLabs", click: () => { app.isQuitting = true; app.quit(); } },
-  ]));
+  const items = [];
+  if (timerState.running) {
+    items.push({ label: "⏱ " + (timerState.projectName || "Tracking") + "  —  " + timerState.label, enabled: false });
+    items.push({ label: "Stop timer & log", click: () => trayCommand({ action: "stop" }) });
+    items.push({ type: "separator" });
+  }
+  const projects = Array.isArray(timerState.projects) ? timerState.projects : [];
+  if (projects.length > 0) {
+    items.push({
+      label: timerState.running ? "Switch project" : "Start timer",
+      submenu: projects.map((pr) => ({ label: pr.name, click: () => trayCommand({ action: "start", projectId: pr.id }) })),
+    });
+    items.push({ type: "separator" });
+  }
+  items.push({ label: "Open PuffLabs", click: showWindow });
+  items.push({ type: "separator" });
+  items.push({ label: "Preferences…", accelerator: "Cmd+,", click: openPrefs });
+  items.push({ label: "Check for Updates…", click: () => checkForUpdates(false) });
+  items.push({ type: "separator" });
+  items.push({ label: "Quit PuffLabs", click: () => { app.isQuitting = true; app.quit(); } });
+  tray.setContextMenu(Menu.buildFromTemplate(items));
 }
+ipcMain.on("tray:timer", (_e, state) => {
+  const next = {
+    running: !!(state && state.running),
+    label: (state && state.label) || "",
+    projectName: (state && state.projectName) || "",
+    projects: (state && Array.isArray(state.projects)) ? state.projects : [],
+  };
+  const structural =
+    next.running !== timerState.running ||
+    next.projectName !== timerState.projectName ||
+    JSON.stringify(next.projects) !== JSON.stringify(timerState.projects);
+  timerState = next;
+  if (tray) {
+    try { tray.setTitle(next.running ? " " + next.label : ""); } catch (e) {}
+    if (structural) updateTrayMenu();
+  }
+});
 
 /* ---------- preferences window ---------- */
 function openPrefs() {
