@@ -53,7 +53,7 @@ async function handleDeepLink(url) {
 let win = null, tray = null, prefsWin = null, lastUnread = 0;
 let timerState = { running: false, label: "", projectName: "", projects: [] };
 function stayInApp(u) { try { const x = new URL(u); return x.origin === HOME_ORIGIN || x.hostname.endsWith("google.com") || x.hostname.endsWith("gstatic.com") || x.hostname.endsWith("supabase.co"); } catch (e) { return false; } }
-function showWindow() { if (!win) createWindow(); win.show(); win.focus(); if (app.dock) app.dock.show(); }
+function showWindow() { if (!win || win.isDestroyed()) createWindow(); win.show(); win.focus(); }
 
 function createWindow() {
   win = new BrowserWindow({
@@ -88,7 +88,10 @@ function createWindow() {
     lastUnread = n;
   });
   // Background mode: closing hides to the menu bar instead of quitting.
-  win.on("close", (e) => { if (settings.runInBackground && !app.isQuitting) { e.preventDefault(); win.hide(); if (app.dock) app.dock.hide(); } });
+  // Hide-on-close so the app keeps running in the tray, but DO NOT toggle
+  // the Dock icon: app.dock.hide()/show() re-lays-out the whole Dock every
+  // time (the "Finder icon glitches" Leon saw). The Dock icon now stays put.
+  win.on("close", (e) => { if (settings.runInBackground && !app.isQuitting) { e.preventDefault(); win.hide(); } });
 }
 
 /* ---------- tray (menu bar) ---------- */
@@ -197,7 +200,14 @@ else {
     if (app.dock && fs.existsSync(iconPath)) { try { app.dock.setIcon(nativeImage.createFromPath(iconPath)); } catch (e) {} }
     createWindow(); createTray(); buildMenu();
     setTimeout(() => checkForUpdates(true), 4000);           // silent check on launch
-    app.on("activate", () => { showWindow(); });
+    // Only surface a window when there ISN\u2019T one already visible. The old
+    // unconditional showWindow() re-focused the window on every activate
+    // (incl. clicking the menu-bar item), stealing focus from the tray menu
+    // so it kept snapping shut.
+    app.on("activate", () => {
+      if (!win || win.isDestroyed()) createWindow();
+      else if (!win.isVisible()) showWindow();
+    });
   });
   app.on("before-quit", () => { app.isQuitting = true; });
   // Stay alive in the background (tray) even with no windows.
