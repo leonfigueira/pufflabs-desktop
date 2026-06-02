@@ -51,7 +51,11 @@ async function handleDeepLink(url) {
 
 /* ---------- window ---------- */
 let win = null, tray = null, prefsWin = null, lastUnread = 0;
-let timerState = { running: false, label: "", projectName: "", projects: [] };
+let timerState = { running: false, label: "", projectName: "", categoryLabel: "", recent: [], projects: [] };
+let lastTrayTitle = null, lastMenuSig = "";
+function trayMenuSignature(s) {
+  return JSON.stringify({ r: s.running, p: s.projectName, c: s.categoryLabel, t: s.running ? "" : s.label, rec: (s.recent || []).map((x) => x.id + "|" + x.name), ids: (s.projects || []).map((x) => x.id + "|" + x.name) });
+}
 function stayInApp(u) { try { const x = new URL(u); return x.origin === HOME_ORIGIN || x.hostname.endsWith("google.com") || x.hostname.endsWith("gstatic.com") || x.hostname.endsWith("supabase.co"); } catch (e) { return false; } }
 function showWindow() { if (!win || win.isDestroyed()) createWindow(); win.show(); win.focus(); }
 
@@ -99,32 +103,47 @@ function createTray() {
   let img = nativeImage.createFromPath(path.join(__dirname, "icon.png"));
   if (!img.isEmpty()) img = img.resize({ width: 18, height: 18 });
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
-  tray.setToolTip("PuffLabs");
-  tray.on("click", showWindow);
+  tray.setToolTip("PuffLabs · time tracker");
+  // No tray.on("click", showWindow): with a context menu, left-click already
+  // opens the menu, and showing/focusing the window stole focus from it (the
+  // menu kept snapping shut). "Open PuffLabs" in the menu opens the app.
   updateTrayMenu();
 }
 function trayCommand(payload) {
+  if (!win || win.isDestroyed()) createWindow();
   if (win && !win.isDestroyed()) win.webContents.send("tray:command", payload);
-  showWindow();
+  // Only surface the window when STOPPING (the post-stop review modal must be
+  // visible). Starting / switching from the tray stays in the background.
+  if (payload && payload.action === "stop") showWindow();
 }
 function updateTrayMenu() {
   if (!tray) return;
   const items = [];
+  const catSub = (pr) => [
+    { label: "Production", click: () => trayCommand({ action: "start", projectId: pr.id, category: "production" }) },
+    { label: "Meetings & training", click: () => trayCommand({ action: "start", projectId: pr.id, category: "meeting" }) },
+  ];
   if (timerState.running) {
-    items.push({ label: "⏱ " + (timerState.projectName || "Tracking") + "  —  " + timerState.label, enabled: false });
-    items.push({ label: "Stop timer & log", click: () => trayCommand({ action: "stop" }) });
-    items.push({ type: "separator" });
+    items.push({ label: "● " + (timerState.projectName || "Tracking") + (timerState.categoryLabel ? "  ·  " + timerState.categoryLabel : ""), enabled: false });
+    items.push({ label: "Stop & log", click: () => trayCommand({ action: "stop" }) });
+  } else {
+    items.push({ label: "Today: " + (timerState.label || "00:00:00"), enabled: false });
   }
-  const projects = Array.isArray(timerState.projects) ? timerState.projects : [];
-  if (projects.length > 0) {
-    items.push({
-      label: timerState.running ? "Switch project" : "Start timer",
-      submenu: projects.map((pr) => ({ label: pr.name, click: () => trayCommand({ action: "start", projectId: pr.id }) })),
-    });
-    items.push({ type: "separator" });
-  }
-  items.push({ label: "Open PuffLabs", click: showWindow });
   items.push({ type: "separator" });
+  const projects = Array.isArray(timerState.projects) ? timerState.projects : [];
+  const recent = Array.isArray(timerState.recent) ? timerState.recent : [];
+  if (recent.length > 0) {
+    items.push({ label: timerState.running ? "Switch to" : "Recent", enabled: false });
+    for (const pr of recent) items.push({ label: pr.name, submenu: catSub(pr) });
+    items.push({ type: "separator" });
+  }
+  if (projects.length > 0) {
+    items.push({ label: "Projects / Work orders", submenu: projects.map((pr) => ({ label: pr.name, submenu: catSub(pr) })) });
+  } else {
+    items.push({ label: "No projects assigned", enabled: false });
+  }
+  items.push({ type: "separator" });
+  items.push({ label: "Open PuffLabs", click: showWindow });
   items.push({ label: "Preferences…", accelerator: "Cmd+,", click: openPrefs });
   items.push({ label: "Check for Updates…", click: () => checkForUpdates(false) });
   items.push({ type: "separator" });
@@ -136,17 +155,16 @@ ipcMain.on("tray:timer", (_e, state) => {
     running: !!(state && state.running),
     label: (state && state.label) || "",
     projectName: (state && state.projectName) || "",
+    categoryLabel: (state && state.categoryLabel) || "",
+    recent: (state && Array.isArray(state.recent)) ? state.recent : [],
     projects: (state && Array.isArray(state.projects)) ? state.projects : [],
   };
-  const structural =
-    next.running !== timerState.running ||
-    next.projectName !== timerState.projectName ||
-    JSON.stringify(next.projects) !== JSON.stringify(timerState.projects);
   timerState = next;
-  if (tray) {
-    try { tray.setTitle(next.running ? " " + next.label : ""); } catch (e) {}
-    if (structural) updateTrayMenu();
-  }
+  if (!tray) return;
+  const title = next.label ? " " + next.label : "";
+  if (title !== lastTrayTitle) { try { tray.setTitle(title); } catch (e) {} lastTrayTitle = title; }
+  const sig = trayMenuSignature(next);
+  if (sig !== lastMenuSig) { lastMenuSig = sig; updateTrayMenu(); }
 });
 
 /* ---------- preferences window ---------- */
