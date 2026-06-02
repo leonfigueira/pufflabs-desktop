@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{color-scheme:dark}
+  body{margin:0;font:13px -apple-system,system-ui,sans-serif;background:#0b0c14;color:#e7e9ee;padding:18px 20px}
+  h1{font-size:15px;font-weight:600;margin:0 0 14px}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+  .row:last-of-type{border-bottom:0}
+  .label{font-weight:500}.hint{font-size:11px;color:#9aa0ad;margin-top:2px;max-width:260px}
+  input[type=checkbox]{width:34px;height:20px;appearance:none;background:rgba(255,255,255,.15);border-radius:20px;position:relative;cursor:pointer;transition:.15s}
+  input[type=checkbox]:checked{background:#7c5cff}
+  input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+  input[type=checkbox]:checked::after{left:16px}
+  .btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#e7e9ee;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+  .btn:hover{background:rgba(255,255,255,.14)}
+  .ver{font-size:11px;color:#9aa0ad;margin-top:14px;text-align:center}
+</style></head><body>
+  <h1>PuffLabs preferences</h1>
+  <div class="row"><div><div class="label">Launch at login</div><div class="hint">Open PuffLabs automatically when you sign in.</div></div><input type="checkbox" id="launchAtLogin"></div>
+  <div class="row"><div><div class="label">Keep running in the background</div><div class="hint">Closing the window keeps it in the menu bar — instant reopen + notifications keep arriving.</div></div><input type="checkbox" id="runInBackground"></div>
+  <div class="row"><div><div class="label">Dock unread badge</div><div class="hint">Show the unread count on the dock icon.</div></div><input type="checkbox" id="dockBadge"></div>
+  <div class="row"><div><div class="label">Bounce dock on new activity</div><div class="hint">Bounce the dock icon when unread count rises.</div></div><input type="checkbox" id="bounce"></div>
+  <div class="row"><div><div class="label">Updates</div><div class="hint">Check for a newer version of the app.</div></div><button class="btn" id="check">Check now</button></div>
+  <div class="ver" id="ver"></div>
+  <script>
+    const ids=["launchAtLogin","runInBackground","dockBadge","bounce"];
+    async function init(){const s=await window.prefs.get();ids.forEach(k=>{document.getElementById(k).checked=!!s[k];});document.getElementById("ver").textContent="Version "+(await window.prefs.version());}
+    ids.forEach(k=>document.getElementById(k).addEventListener("change",e=>window.prefs.set({[k]:e.target.checked})));
+    document.getElementById("check").addEventListener("click",()=>window.prefs.checkUpdates());
+    init();
+  </script>
+</body></html>

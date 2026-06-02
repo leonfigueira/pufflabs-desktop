@@ -1,0 +1,38 @@
+{
+  "name": "pufflabs-desktop",
+  "productName": "PuffLabs",
+  "version": "0.1.0",
+  "description": "PuffLabs Communications — macOS desktop app (thin shell around the live site)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.106.2"
+  },
+  "build": {
+    "appId": "work.pufflabs.desktop",
+    "productName": "PuffLabs",
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business",
+      "icon": "icon.png",
+      "identity": null
+    },
+    "protocols": [
+      {
+        "name": "PuffLabs",
+        "schemes": [
+          "pufflabs"
+        ]
+      }
+    ]
+  }
+}
