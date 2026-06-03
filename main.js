@@ -58,7 +58,7 @@ let lastTrayTitle = null, lastMenuSig = "";
 function trayMenuSignature(s) {
   return JSON.stringify({ r: s.running, p: s.projectName, c: s.categoryLabel, t: s.running ? "" : s.label, rec: (s.recent || []).map((x) => x.id + "|" + x.name), ids: (s.projects || []).map((x) => x.id + "|" + x.name) });
 }
-function stayInApp(u) { try { const x = new URL(u); return x.origin === HOME_ORIGIN || x.hostname.endsWith("google.com") || x.hostname.endsWith("gstatic.com") || x.hostname.endsWith("supabase.co"); } catch (e) { return false; } }
+function stayInApp(u) { try { const x = new URL(u); const h = x.hostname.toLowerCase(); const okHost = (d) => h === d || h.endsWith("." + d); return x.origin === HOME_ORIGIN || okHost("google.com") || okHost("gstatic.com") || okHost("supabase.co"); } catch (e) { return false; } }
 function showWindow() { if (!win || win.isDestroyed()) createWindow(); win.show(); win.focus(); }
 
 function createWindow() {
