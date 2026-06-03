@@ -12,8 +12,12 @@ const SCHEME = "pufflabs";
 const UPDATE_URL = "https://www.pufflabs.work/desktop/latest.json"; // {version,url}
 const DOWNLOAD_PAGE = "https://www.pufflabs.work/download";
 
-app.userAgentFallback =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const IS_MAC = process.platform === "darwin";
+const IS_WIN = process.platform === "win32";
+
+app.userAgentFallback = IS_WIN
+  ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /* ---------- settings (local to this Mac, JSON in userData) ---------- */
 const SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
@@ -65,10 +69,15 @@ function createWindow() {
   win = new BrowserWindow({
     ...savedBoundsOrDefault(), minWidth: 900, minHeight: 600, show: true,
     title: "PuffLabs", backgroundColor: "#030408",
-    titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 10 },
+    ...(IS_MAC ? { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 10 } } : { frame: false }),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false, spellcheck: true },
   });
   win.loadURL(APP_URL);
+  // Custom window controls: the web draws mac-style dots on Windows and needs
+  // the maximize state; clear the taskbar flash when the window is focused.
+  win.on("maximize", () => { try { win.webContents.send("win:maximized-changed", true); } catch (e) {} });
+  win.on("unmaximize", () => { try { win.webContents.send("win:maximized-changed", false); } catch (e) {} });
+  win.on("focus", () => { try { win.flashFrame(false); } catch (e) {} });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!stayInApp(url)) { shell.openExternal(url); return { action: "deny" }; }
     // Time-tracker pop-out: open it FRAMELESS like the main window (hidden
@@ -78,7 +87,7 @@ function createWindow() {
     try { const u = new URL(url); timerPip = u.pathname.startsWith("/timesheets/timer") || u.searchParams.get("pip") === "1"; } catch (e) {}
     if (timerPip) {
       return { action: "allow", overrideBrowserWindowOptions: {
-        backgroundColor: "#0c0a1a", titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 18 },
+        backgroundColor: "#0c0a1a", ...(IS_MAC ? { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 18 } } : { frame: false }),
         webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false, additionalArguments: ["--pufflabs-frameless-popout"] },
       } };
     }
@@ -91,6 +100,7 @@ function createWindow() {
     const n = parseInt((/^\((\d+)\)/.exec(title || "") || [])[1] || "0", 10);
     if (app.dock && settings.dockBadge) app.dock.setBadge(n ? String(n) : "");
     if (n > lastUnread && settings.bounce && app.dock) app.dock.bounce("informational");
+    if (IS_WIN && n > lastUnread && settings.bounce) { try { if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true); } catch (e) {} }
     lastUnread = n;
   });
   // Background mode: closing hides to the menu bar instead of quitting.
@@ -176,7 +186,7 @@ function updateTrayMenu() {
   { const paused = Date.now() < snoozeUntil; const fmt = (t) => { try { return new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch (e) { return ""; } }; const tomorrow8 = () => { const d = new Date(); d.setHours(d.getHours() < 8 ? 8 : 32, 0, 0, 0); return d.getTime(); }; items.push({ label: paused ? ("Notifications paused \u00b7 until " + fmt(snoozeUntil)) : "Pause notifications", submenu: paused ? [ { label: "Resume notifications", click: () => setSnooze(0) } ] : [ { label: "For 30 minutes", click: () => setSnooze(Date.now() + 1800000) }, { label: "For 1 hour", click: () => setSnooze(Date.now() + 3600000) }, { label: "Until tomorrow", click: () => setSnooze(tomorrow8()) }, { label: "Until I turn it back on", click: () => setSnooze(Date.now() + 3153600000000) } ] }); }
   items.push({ type: "separator" });
   items.push({ label: "Open PuffLabs", click: showWindow });
-  items.push({ label: "Preferences…", accelerator: "Cmd+,", click: openPrefs });
+  items.push({ label: "Preferences…", accelerator: "CommandOrControl+,", click: openPrefs });
   items.push({ label: "Check for Updates…", click: () => checkForUpdates(false) });
   items.push({ type: "separator" });
   items.push({ label: "Quit PuffLabs", click: () => { app.isQuitting = true; app.quit(); } });
@@ -193,8 +203,14 @@ ipcMain.on("tray:timer", (_e, state) => {
   };
   timerState = next;
   if (!tray) return;
-  const title = (settings.showTrayTimer !== false && next.label) ? " " + next.label : "";
-  if (title !== lastTrayTitle) { try { tray.setTitle(title); } catch (e) {} lastTrayTitle = title; }
+  if (IS_MAC) {
+    const title = (settings.showTrayTimer !== false && next.label) ? " " + next.label : "";
+    if (title !== lastTrayTitle) { try { tray.setTitle(title); } catch (e) {} lastTrayTitle = title; }
+  } else {
+    // Windows tray has no title text; surface the running total in the tooltip.
+    const tip = next.running ? ("PuffLabs · " + (next.projectName || "tracking") + (next.label ? "  " + next.label : "")) : (next.label ? ("PuffLabs · today " + next.label) : "PuffLabs · time tracker");
+    if (tip !== lastTrayTitle) { try { tray.setToolTip(tip); } catch (e) {} lastTrayTitle = tip; }
+  }
   const sig = trayMenuSignature(next);
   if (sig !== lastMenuSig) { lastMenuSig = sig; updateTrayMenu(); }
 });
@@ -212,7 +228,7 @@ ipcMain.handle("prefs:set", (_e, patch) => {
   settings = { ...settings, ...patch }; saveSettings(); applySettings(); applyGlobalHotkey();
   // Apply the menu-bar timer visibility immediately (don\u2019t wait for the
   // next push, which only happens on a store change / tick).
-  if (tray) {
+  if (tray && IS_MAC) {
     const title = (settings.showTrayTimer !== false && timerState.label) ? " " + timerState.label : "";
     try { tray.setTitle(title); } catch (e) {}
     lastTrayTitle = title;
@@ -222,6 +238,13 @@ ipcMain.handle("prefs:set", (_e, patch) => {
 ipcMain.handle("prefs:version", () => app.getVersion());
 ipcMain.handle("prefs:check-updates", () => checkForUpdates(false));
 ipcMain.on("open-prefs", () => openPrefs());
+
+/* ---------- custom window controls (the web draws mac-style dots on Windows;
+   on macOS the OS draws the real traffic lights) ---------- */
+ipcMain.on("win:minimize", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); } catch (er) {} });
+ipcMain.on("win:maximize", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize(); } } catch (er) {} });
+ipcMain.on("win:close", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); } catch (er) {} });
+ipcMain.handle("win:is-maximized", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); return !!(w && w.isMaximized()); } catch (er) { return false; } });
 ipcMain.handle("prefs:test-notification", () => { try { const n = new Notification({ title: "PuffLabs", body: "Notifications are working. You'll get these for mentions, replies and direct messages." }); n.on("click", () => showWindow()); n.show(); return true; } catch (e) { return false; } });
 ipcMain.on("notify:show", (_e, p) => { try { if (settings.nativeNotifications === false) return; if (Date.now() < snoozeUntil) return; if (!p || !p.title) return; { const k = p.kind || ""; const ok = k === "dm" ? settings.notifyDMs !== false : k === "channel_mention" ? settings.notifyMentions !== false : k === "channel_at_channel" ? settings.notifyChannelWide !== false : settings.notifyOther !== false; if (!ok) return; } const body = settings.notifPreview === false ? "New message" : String(p.body || ""); const n = new Notification({ title: String(p.title), body, silent: settings.notifSilent === true }); n.on("click", () => { showWindow(); if (p.url && win && !win.isDestroyed()) win.webContents.send("notify:click", String(p.url)); }); n.show(); } catch (e) {} });
 
@@ -243,13 +266,17 @@ async function checkForUpdates(silent) {
 
 /* ---------- menu ---------- */
 function buildMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: "PuffLabs", submenu: [ { role: "about" }, { label: "Preferences…", accelerator: "Cmd+,", click: openPrefs }, { label: "Check for Updates…", click: () => checkForUpdates(false) }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { type: "separator" }, { label: "Quit", accelerator: "Cmd+Q", click: () => { app.isQuitting = true; app.quit(); } } ] },
-    { role: "editMenu" },
-    { label: "View", submenu: [ { label: "Communications", accelerator: "Cmd+1", click: () => { showWindow(); win.loadURL(APP_URL); } }, { label: "Sign in", accelerator: "Cmd+L", click: startLogin }, { type: "separator" }, { role: "reload" }, { role: "forceReload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" } ] },
-    { role: "windowMenu" },
-    { role: "help", submenu: [ { label: "Force Reload (fetch the latest build)", role: "forceReload" }, { label: "Clear Cache & Restart", click: clearCacheAndRestart }, { type: "separator" }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "PuffLabs Website", click: () => shell.openExternal(HOME_ORIGIN) } ] },
-  ]));
+  const tmpl = [];
+  if (IS_MAC) {
+    tmpl.push({ label: "PuffLabs", submenu: [ { role: "about" }, { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
+  } else {
+    tmpl.push({ label: "File", submenu: [ { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
+  }
+  tmpl.push({ role: "editMenu" });
+  tmpl.push({ label: "View", submenu: [ { label: "Communications", accelerator: "CommandOrControl+1", click: () => { showWindow(); win.loadURL(APP_URL); } }, { label: "Sign in", accelerator: "CommandOrControl+L", click: startLogin }, { type: "separator" }, { role: "reload" }, { role: "forceReload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" } ] });
+  tmpl.push({ role: "windowMenu" });
+  tmpl.push({ role: "help", submenu: [ { label: "Force Reload (fetch the latest build)", role: "forceReload" }, { label: "Clear Cache && Restart", click: clearCacheAndRestart }, { type: "separator" }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "PuffLabs Website", click: () => shell.openExternal(HOME_ORIGIN) } ] });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(tmpl));
 }
 
 async function clearCacheAndRestart() {
@@ -267,15 +294,24 @@ function applyGlobalHotkey() {
 /* ---------- lifecycle ---------- */
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else {
-  app.setAsDefaultProtocolClient(SCHEME);
+  // Protocol registration. macOS: a plain call. Windows in dev: pass the exe +
+  // script path so the launched copy carries the pufflabs:// URL in argv.
+  if (IS_WIN && process.defaultApp && process.argv.length >= 2) {
+    try { app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])]); } catch (e) {}
+  } else {
+    app.setAsDefaultProtocolClient(SCHEME);
+  }
   app.on("open-url", (e, url) => { e.preventDefault(); handleDeepLink(url); });
   app.on("second-instance", (_e, argv) => { const u = argv.find((a) => a.startsWith(SCHEME + "://")); if (u) handleDeepLink(u); else showWindow(); });
   app.whenReady().then(() => {
+    try { app.setAppUserModelId("work.pufflabs.desktop"); } catch (e) {}
     settings = loadSettings(); applySettings();
     const iconPath = path.join(__dirname, "icon.png");
     if (app.dock && fs.existsSync(iconPath)) { try { app.dock.setIcon(nativeImage.createFromPath(iconPath)); } catch (e) {} }
     createWindow(); createTray(); buildMenu();
     applyGlobalHotkey();
+    // Windows first-launch-from-protocol: the deep link arrives in argv.
+    if (IS_WIN) { try { const u = process.argv.find((a) => a.startsWith(SCHEME + "://")); if (u) handleDeepLink(u); } catch (e) {} }
     setTimeout(() => checkForUpdates(true), 4000);           // silent check on launch
     // Only surface a window when there ISN\u2019T one already visible. The old
     // unconditional showWindow() re-focused the window on every activate

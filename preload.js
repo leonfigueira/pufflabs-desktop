@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webFrame } = require("electron");
 const { createBrowserClient } = require("@supabase/ssr");
 
 const SUPABASE_URL = "https://ogubjsuqdsbdewhwlkit.supabase.co";
@@ -41,5 +41,47 @@ contextBridge.exposeInMainWorld("pufflabsTray", {
     const handler = (_e, payload) => { try { cb(payload); } catch (e) {} };
     ipcRenderer.on("tray:command", handler);
     return () => { try { ipcRenderer.removeListener("tray:command", handler); } catch (e) {} };
+  },
+});
+
+// App chrome bridge for the in-app Slack-style top bar (search /
+// zoom / preferences). Zoom uses webFrame directly (renderer
+// process); the Preferences button asks main to open the prefs
+// window over IPC.
+contextBridge.exposeInMainWorld("pufflabsApp", {
+  zoomIn: () => { try { webFrame.setZoomLevel(Math.min(webFrame.getZoomLevel() + 0.5, 3)); } catch (e) {} },
+  zoomOut: () => { try { webFrame.setZoomLevel(Math.max(webFrame.getZoomLevel() - 0.5, -3)); } catch (e) {} },
+  zoomReset: () => { try { webFrame.setZoomLevel(0); } catch (e) {} },
+  openPreferences: () => { try { ipcRenderer.send("open-prefs"); } catch (e) {} },
+});
+
+// Native notification bridge: the renderer asks main to show a macOS
+// notification (main owns the on/off setting + reliable click focus).
+contextBridge.exposeInMainWorld("pufflabsNotify", {
+  show: (p) => { try { ipcRenderer.send("notify:show", p); } catch (e) {} },
+  onClick: (cb) => {
+    const handler = (_e, url) => { try { cb(url); } catch (e) {} };
+    ipcRenderer.on("notify:click", handler);
+    return () => { try { ipcRenderer.removeListener("notify:click", handler); } catch (e) {} };
+  },
+});
+
+// Platform string so the web app can branch (e.g. draw mac-style window
+// control dots only on Windows, where the OS draws none in a frameless window).
+contextBridge.exposeInMainWorld("pufflabsPlatform", process.platform);
+
+// Window controls for the frameless window. On Windows the web app draws the
+// mac-style traffic-light dots in the top-left and calls these; on macOS the OS
+// draws the real traffic lights so these go unused. Works for the main window
+// AND the timer pop-out (main resolves the window from the IPC sender).
+contextBridge.exposeInMainWorld("pufflabsWindow", {
+  minimize: () => { try { ipcRenderer.send("win:minimize"); } catch (e) {} },
+  maximize: () => { try { ipcRenderer.send("win:maximize"); } catch (e) {} },
+  close: () => { try { ipcRenderer.send("win:close"); } catch (e) {} },
+  isMaximized: () => { try { return ipcRenderer.invoke("win:is-maximized"); } catch (e) { return Promise.resolve(false); } },
+  onMaximizedChanged: (cb) => {
+    const handler = (_e, val) => { try { cb(!!val); } catch (e) {} };
+    ipcRenderer.on("win:maximized-changed", handler);
+    return () => { try { ipcRenderer.removeListener("win:maximized-changed", handler); } catch (e) {} };
   },
 });
