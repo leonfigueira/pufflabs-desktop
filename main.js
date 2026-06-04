@@ -257,7 +257,7 @@ async function checkForUpdates(silent) {
     const j = await r.json();
     if (j && j.version && vGt(j.version, app.getVersion())) {
       const res = await dialog.showMessageBox({ type: "info", buttons: ["Download", "Later"], defaultId: 0, message: "Update available", detail: "PuffLabs " + j.version + " is available (you have " + app.getVersion() + ")." });
-      if (res.response === 0) shell.openExternal(j.url || DOWNLOAD_PAGE);
+      if (res.response === 0) shell.openExternal((IS_WIN ? (j.url_win || j.url) : (j.url_mac || j.url)) || DOWNLOAD_PAGE);
     } else if (!silent) {
       dialog.showMessageBox({ type: "info", message: "You're up to date", detail: "PuffLabs " + app.getVersion() });
     }
