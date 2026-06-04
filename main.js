@@ -94,7 +94,6 @@ function createWindow() {
     return { action: "allow" };
   });
   win.webContents.on("will-navigate", (e, url) => { if (!stayInApp(url)) { e.preventDefault(); shell.openExternal(url); } });
-  win.webContents.on("did-navigate", (_e, url) => { try { if (new URL(url).pathname.startsWith("/login") && !loggingIn) startLogin(); } catch (e) {} });
   // Dock unread badge + bounce on increase (from the "(N) " title the web app sets).
   win.webContents.on("page-title-updated", (_e, title) => {
     const n = parseInt((/^\((\d+)\)/.exec(title || "") || [])[1] || "0", 10);
@@ -245,6 +244,11 @@ ipcMain.on("win:minimize", (e) => { try { const w = BrowserWindow.fromWebContent
 ipcMain.on("win:maximize", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize(); } } catch (er) {} });
 ipcMain.on("win:close", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); } catch (er) {} });
 ipcMain.handle("win:is-maximized", (e) => { try { const w = BrowserWindow.fromWebContents(e.sender); return !!(w && w.isMaximized()); } catch (er) { return false; } });
+
+/* ---------- sign-in: the /login page (in-app) calls this to open Google OAuth
+   in the real browser. Resetting loggingIn first means every click retries
+   cleanly — no stuck state that used to need an app restart. ---------- */
+ipcMain.on("auth:start-login", () => { loggingIn = false; startLogin(); });
 ipcMain.handle("prefs:test-notification", () => { try { const n = new Notification({ title: "PuffLabs", body: "Notifications are working. You'll get these for mentions, replies and direct messages." }); n.on("click", () => showWindow()); n.show(); return true; } catch (e) { return false; } });
 ipcMain.on("notify:show", (_e, p) => { try { if (settings.nativeNotifications === false) return; if (Date.now() < snoozeUntil) return; if (!p || !p.title) return; { const k = p.kind || ""; const ok = k === "dm" ? settings.notifyDMs !== false : k === "channel_mention" ? settings.notifyMentions !== false : k === "channel_at_channel" ? settings.notifyChannelWide !== false : settings.notifyOther !== false; if (!ok) return; } const body = settings.notifPreview === false ? "New message" : String(p.body || ""); const n = new Notification({ title: String(p.title), body, silent: settings.notifSilent === true }); n.on("click", () => { showWindow(); if (p.url && win && !win.isDestroyed()) win.webContents.send("notify:click", String(p.url)); }); n.show(); } catch (e) {} });
 

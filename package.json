@@ -1,7 +1,7 @@
 {
   "name": "pufflabs-desktop",
   "productName": "PuffLabs",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "PuffLabs Communications — cross-platform desktop app (macOS + Windows; thin shell around the live site)",
   "main": "main.js",
   "scripts": {
@@ -27,6 +27,9 @@
       "category": "public.app-category.business",
       "icon": "icon.png",
       "identity": null
+    },
+    "dmg": {
+      "artifactName": "PuffLabs.dmg"
     },
     "win": {
       "target": [

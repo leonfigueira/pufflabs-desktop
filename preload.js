@@ -9,6 +9,10 @@ const SUPABASE_ANON =
 // @supabase/ssr browser client the website uses, so setSession writes the
 // sb-<ref>-auth-token cookie in the exact format the server expects.
 contextBridge.exposeInMainWorld("pufflabsAuth", {
+  // Ask the shell to open Google OAuth in the user's real browser (Google
+  // blocks OAuth inside an app webview). The /login page calls this so sign-in
+  // is an explicit, reliable, user-initiated action rather than an auto-timer.
+  signIn: () => { try { ipcRenderer.send("auth:start-login"); } catch (e) {} },
   setSession: async (access_token, refresh_token) => {
     try {
       const sb = createBrowserClient(SUPABASE_URL, SUPABASE_ANON);
