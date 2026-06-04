@@ -80,6 +80,9 @@
       <div class="card">
         <div class="row"><div><div class="label">PuffLabs for Mac</div><div class="hint" id="ver">Version ...</div></div><button class="btn" id="check">Check for updates</button></div>
       </div>
+      <div class="card" style="margin-top:14px">
+        <div class="row"><div><div class="label">Account</div><div class="hint">Sign out of PuffLabs on this device. You'll be returned to the sign-in screen.</div></div><button class="btn" id="signout" style="color:#f87171;border-color:rgba(248,113,113,0.45)">Sign out</button></div>
+      </div>
     </section>
   </main>
 
@@ -103,6 +106,7 @@
     ids.forEach(function(k){document.getElementById(k).addEventListener("change",function(e){window.prefs.set({[k]:e.target.checked}); if(k==="nativeNotifications") syncTypeDim();});});
     document.getElementById("check").addEventListener("click",function(){window.prefs.checkUpdates();});
     document.getElementById("testNotif").addEventListener("click",function(){window.prefs.testNotification();});
+    document.getElementById("signout").addEventListener("click",function(){window.prefs.signOut();});
     init();
   </script>
 </body></html>

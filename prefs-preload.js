@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("prefs", {
   checkUpdates: () => ipcRenderer.invoke("prefs:check-updates"),
   version: () => ipcRenderer.invoke("prefs:version"),
   testNotification: () => ipcRenderer.invoke("prefs:test-notification"),
+  signOut: () => ipcRenderer.invoke("prefs:sign-out"),
 });

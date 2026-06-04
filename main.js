@@ -54,6 +54,28 @@ async function handleDeepLink(url) {
     await win.loadURL(APP_URL); showWindow();
   } catch (e) { console.error("[auth] deeplink", e); }
 }
+// Sign out: hit the REAL POST /auth/signout route (it clears the Supabase
+// session + trusted-device cookie server-side and is POST-only by design — a
+// GET would be wrong), then land on /login. Falls back to just loading /login.
+async function signOut() {
+  try {
+    if (!win || win.isDestroyed()) createWindow();
+    showWindow();
+    const cur = (win.webContents && win.webContents.getURL && win.webContents.getURL()) || "";
+    if (cur.indexOf(HOME_ORIGIN) === 0) {
+      // Fire-and-forget — the navigation aborts the eval, which is expected.
+      win.webContents.executeJavaScript(
+        "fetch('/auth/signout',{method:'POST'}).catch(function(){}).finally(function(){location.replace('/login');});"
+      ).catch(function () {});
+    } else {
+      await win.loadURL(HOME_ORIGIN + "/login");
+    }
+  } catch (e) {
+    try { await win.loadURL(HOME_ORIGIN + "/login"); } catch (e2) {}
+  }
+  try { await sb.auth.signOut(); } catch (e) {}
+  loggingIn = false;
+}
 
 /* ---------- window ---------- */
 let win = null, tray = null, prefsWin = null, lastUnread = 0;
@@ -336,6 +358,7 @@ ipcMain.handle("prefs:set", (_e, patch) => {
   return settings;
 });
 ipcMain.handle("prefs:version", () => app.getVersion());
+ipcMain.handle("prefs:sign-out", () => { try { if (prefsWin && !prefsWin.isDestroyed()) prefsWin.close(); } catch (e) {} signOut(); return true; });
 ipcMain.handle("prefs:check-updates", () => checkForUpdates(false));
 ipcMain.on("open-prefs", () => openPrefs());
 
@@ -373,12 +396,12 @@ async function checkForUpdates(silent) {
 function buildMenu() {
   const tmpl = [];
   if (IS_MAC) {
-    tmpl.push({ label: "PuffLabs", submenu: [ { role: "about" }, { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
+    tmpl.push({ label: "PuffLabs", submenu: [ { role: "about" }, { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "Sign Out", click: signOut }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
   } else {
-    tmpl.push({ label: "File", submenu: [ { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
+    tmpl.push({ label: "File", submenu: [ { label: "Preferences\u2026", accelerator: "CommandOrControl+,", click: openPrefs }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "Sign Out", click: signOut }, { type: "separator" }, { label: "Quit", accelerator: "CommandOrControl+Q", click: () => { app.isQuitting = true; app.quit(); } } ] });
   }
   tmpl.push({ role: "editMenu" });
-  tmpl.push({ label: "View", submenu: [ { label: "Communications", accelerator: "CommandOrControl+1", click: () => { showWindow(); win.loadURL(APP_URL); } }, { label: "Sign in", accelerator: "CommandOrControl+L", click: startLogin }, { type: "separator" }, { role: "reload" }, { role: "forceReload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" } ] });
+  tmpl.push({ label: "View", submenu: [ { label: "Communications", accelerator: "CommandOrControl+1", click: () => { showWindow(); win.loadURL(APP_URL); } }, { label: "Sign in", accelerator: "CommandOrControl+L", click: startLogin }, { label: "Sign out", accelerator: "CommandOrControl+Shift+L", click: signOut }, { type: "separator" }, { role: "reload" }, { role: "forceReload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" } ] });
   tmpl.push({ role: "windowMenu" });
   tmpl.push({ role: "help", submenu: [ { label: "Force Reload (fetch the latest build)", role: "forceReload" }, { label: "Clear Cache && Restart", click: clearCacheAndRestart }, { type: "separator" }, { label: "Check for Updates\u2026", click: () => checkForUpdates(false) }, { type: "separator" }, { label: "PuffLabs Website", click: () => shell.openExternal(HOME_ORIGIN) } ] });
   Menu.setApplicationMenu(Menu.buildFromTemplate(tmpl));
