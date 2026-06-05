@@ -92,7 +92,7 @@ function createWindow() {
     ...savedBoundsOrDefault(), minWidth: 900, minHeight: 600, show: true,
     title: "PuffLabs", backgroundColor: "#030408",
     ...(IS_MAC ? { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 10 } } : { frame: false }),
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false, spellcheck: true },
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, webSecurity: true, sandbox: false, spellcheck: true },
   });
   win.loadURL(APP_URL);
   // Windows taskbar timer affordances: prebuild the small glyphs once the page
@@ -113,7 +113,7 @@ function createWindow() {
     if (timerPip) {
       return { action: "allow", overrideBrowserWindowOptions: {
         backgroundColor: "#0c0a1a", ...(IS_MAC ? { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 18 } } : { frame: false }),
-        webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: false, additionalArguments: ["--pufflabs-frameless-popout"] },
+        webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, webSecurity: true, sandbox: false, additionalArguments: ["--pufflabs-frameless-popout"] },
       } };
     }
     return { action: "allow" };
@@ -338,7 +338,7 @@ async function updateWinTaskbar(state) {
 function openPrefs() {
   if (prefsWin) { prefsWin.focus(); return; }
   prefsWin = new BrowserWindow({ width: 720, height: 560, resizable: false, title: "Preferences", backgroundColor: "#0b0c14",
-    webPreferences: { preload: path.join(__dirname, "prefs-preload.js"), contextIsolation: true } });
+    webPreferences: { preload: path.join(__dirname, "prefs-preload.js"), contextIsolation: true, nodeIntegration: false, webSecurity: true, sandbox: false } });
   prefsWin.loadFile("preferences.html");
   prefsWin.on("closed", () => { prefsWin = null; });
 }
