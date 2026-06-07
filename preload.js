@@ -96,4 +96,5 @@ contextBridge.exposeInMainWorld("pufflabsCapture", {
   idleSeconds: () => ipcRenderer.invoke("puffstaff:idle"),
   screenPermission: () => ipcRenderer.invoke("puffstaff:screen-perm"),
   captureScreens: () => ipcRenderer.invoke("puffstaff:screens"),
+  activeWindow: () => ipcRenderer.invoke("puffstaff:appwindow"),
 });

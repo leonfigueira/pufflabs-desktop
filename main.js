@@ -447,6 +447,24 @@ ipcMain.handle("puffstaff:screens", async () => {
   } catch (e) { return { perm: "error", shots: [] }; }
 });
 
+
+// Puffstaff app/URL tracking — active window (app name + title) + browser URL
+// via get-windows (ESM-only, dynamic import; native module → electron-rebuild).
+// Only polled by the renderer when the App/URL toggle is on, so the macOS
+// Accessibility/Screen-Recording prompts only appear if the feature is enabled.
+let __getWindowsMod = null;
+ipcMain.handle("puffstaff:appwindow", async () => {
+  try {
+    if (!__getWindowsMod) __getWindowsMod = await import("get-windows");
+    const w = await __getWindowsMod.activeWindow();
+    if (!w) return null;
+    const url = w.url || null;
+    let domain = null;
+    if (url) { try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch (e) {} }
+    return { appName: (w.owner && w.owner.name) || "Unknown", title: w.title || null, url, domain };
+  } catch (e) { return null; }
+});
+
   app.whenReady().then(() => {
     try { app.setAppUserModelId("work.pufflabs.desktop"); } catch (e) {}
     settings = loadSettings(); applySettings();
