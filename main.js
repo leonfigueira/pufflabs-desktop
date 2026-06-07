@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain, dialog, Notification, globalShortcut, session } = require("electron");
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain, dialog, Notification, globalShortcut, session, powerMonitor, desktopCapturer, systemPreferences } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { createClient } = require("@supabase/supabase-js");
@@ -431,6 +431,22 @@ else {
   }
   app.on("open-url", (e, url) => { e.preventDefault(); handleDeepLink(url); });
   app.on("second-instance", (_e, argv) => { const u = argv.find((a) => a.startsWith(SCHEME + "://")); if (u) handleDeepLink(u); else showWindow(); });
+
+// ── Puffstaff activity capture bridge (idle + screenshots) ──────────────
+// The renderer holds the auth session + timer state, so it drives the 10-min
+// capture loop and posts slots to /auth/puffstaff/ingest. Main just exposes
+// the OS-level capabilities it cannot reach from the renderer.
+ipcMain.handle("puffstaff:idle", () => { try { return powerMonitor.getSystemIdleTime(); } catch (e) { return 0; } });
+ipcMain.handle("puffstaff:screen-perm", () => { try { return process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("screen") : "granted"; } catch (e) { return "unknown"; } });
+ipcMain.handle("puffstaff:screens", async () => {
+  try {
+    if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") return { perm: "denied", shots: [] };
+    const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1280, height: 800 } });
+    const shots = sources.map((s, i) => { try { const jpg = s.thumbnail.toJPEG(55); if (!jpg || !jpg.length) return null; return { displayIndex: i, dataUrl: "data:image/jpeg;base64," + jpg.toString("base64") }; } catch (e) { return null; } }).filter(Boolean);
+    return { perm: "granted", shots };
+  } catch (e) { return { perm: "error", shots: [] }; }
+});
+
   app.whenReady().then(() => {
     try { app.setAppUserModelId("work.pufflabs.desktop"); } catch (e) {}
     settings = loadSettings(); applySettings();

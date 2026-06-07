@@ -89,3 +89,11 @@ contextBridge.exposeInMainWorld("pufflabsWindow", {
     return () => { try { ipcRenderer.removeListener("win:maximized-changed", handler); } catch (e) {} };
   },
 });
+
+// Puffstaff capture bridge: lets the renderer read system idle time + grab
+// per-display screenshots (main owns the OS APIs + macOS permissions).
+contextBridge.exposeInMainWorld("pufflabsCapture", {
+  idleSeconds: () => ipcRenderer.invoke("puffstaff:idle"),
+  screenPermission: () => ipcRenderer.invoke("puffstaff:screen-perm"),
+  captureScreens: () => ipcRenderer.invoke("puffstaff:screens"),
+});
