@@ -92,7 +92,7 @@ function createWindow() {
     ...savedBoundsOrDefault(), minWidth: 900, minHeight: 600, show: true,
     title: "PuffLabs", backgroundColor: "#030408",
     ...(IS_MAC ? { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 10 } } : { frame: false }),
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, webSecurity: true, sandbox: false, spellcheck: true },
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, webSecurity: true, sandbox: false, spellcheck: true, backgroundThrottling: false },
   });
   win.loadURL(APP_URL);
   // Windows taskbar timer affordances: prebuild the small glyphs once the page
