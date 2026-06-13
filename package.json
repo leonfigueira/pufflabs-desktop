@@ -8,7 +8,8 @@
     "start": "electron .",
     "dist": "electron-builder --mac dmg",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win"
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux AppImage"
   },
   "license": "UNLICENSED",
   "devDependencies": {
@@ -59,6 +60,16 @@
           "pufflabs"
         ]
       }
-    ]
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network",
+      "icon": "icon.png",
+      "artifactName": "PuffLabs.AppImage",
+      "maintainer": "PuffLabs <support@pufflabs.work>",
+      "synopsis": "PuffLabs Communications"
+    }
   }
 }
