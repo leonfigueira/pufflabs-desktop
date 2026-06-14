@@ -82,7 +82,7 @@ let win = null, tray = null, prefsWin = null, lastUnread = 0;
 let timerState = { running: false, label: "", projectName: "", categoryLabel: "", recent: [], projects: [] };
 let lastTrayTitle = null, lastMenuSig = "";
 function trayMenuSignature(s) {
-  return JSON.stringify({ r: s.running, p: s.projectName, c: s.categoryLabel, t: s.running ? "" : s.label, rec: (s.recent || []).map((x) => x.id + "|" + x.name), ids: (s.projects || []).map((x) => x.id + "|" + x.name + "|" + ((x.timers || []).map((t) => t.id + ":" + t.name).join(","))) });
+  return JSON.stringify({ r: s.running, p: s.projectName, c: s.categoryLabel, t: s.running ? "" : s.label, rec: (s.recent || []).map((x) => x.id + "|" + x.name), ids: (s.projects || []).map((x) => x.id + "|" + x.name + "|" + (x.productionDisabled ? 1 : 0) + (x.meetingsDisabled ? 1 : 0) + "|" + ((x.timers || []).map((t) => t.id + ":" + t.name + ":" + t.category).join(","))) });
 }
 function stayInApp(u) { try { const x = new URL(u); const h = x.hostname.toLowerCase(); const okHost = (d) => h === d || h.endsWith("." + d); return x.origin === HOME_ORIGIN || okHost("google.com") || okHost("gstatic.com") || okHost("supabase.co"); } catch (e) { return false; } }
 function showWindow() { if (!win || win.isDestroyed()) createWindow(); win.show(); win.focus(); }
@@ -171,23 +171,19 @@ function trayCommand(payload) {
 function updateTrayMenu() {
   if (!tray) return;
   const items = [];
-  // Each project opens a submenu to pick the bucket, then starts/switches.
   // NOTE: "&&" renders as a literal "&" (a single "&" is eaten as a mnemonic).
-  // Category picker for a specific timer (timerId undefined = the group's
-  // built-in "General" timer). Each click starts/switches to that timer+bucket.
-  const catItems = (pr, timerId) => [
-    { label: "Production", click: () => trayCommand({ action: "start", projectId: pr.id, timerId: timerId, category: "production" }) },
-    { label: "Meetings && training", click: () => trayCommand({ action: "start", projectId: pr.id, timerId: timerId, category: "meeting" }) },
-  ];
-  // A project that has EXTRA named timers nests them (General + each named
-  // timer); a plain project shows Production / Meetings directly.
-  const catSub = (pr) => {
-    const named = Array.isArray(pr.timers) ? pr.timers : [];
-    if (named.length === 0) return catItems(pr, undefined);
-    return [
-      { label: "General", submenu: catItems(pr, undefined) },
-      ...named.map((tm) => ({ label: tm.name, submenu: catItems(pr, tm.id) })),
-    ];
+  // Flat "Group · Timer" entries (Leon 2026-06-14): the group's built-in
+  // Production / Meetings & training plus each named timer, each a one-click
+  // start of that exact timer — no category submenu.
+  const entriesFor = (pr) => {
+    const out = [];
+    if (!pr.productionDisabled)
+      out.push({ label: pr.name + " · Production", click: () => trayCommand({ action: "start", projectId: pr.id, category: "production" }) });
+    if (!pr.meetingsDisabled)
+      out.push({ label: pr.name + " · Meetings && training", click: () => trayCommand({ action: "start", projectId: pr.id, category: "meeting" }) });
+    for (const tm of (Array.isArray(pr.timers) ? pr.timers : []))
+      out.push({ label: pr.name + " · " + tm.name, click: () => trayCommand({ action: "start", projectId: pr.id, timerId: tm.id, category: tm.category === "meeting" ? "meeting" : "production" }) });
+    return out;
   };
   const projects = Array.isArray(timerState.projects) ? timerState.projects : [];
   const recent = Array.isArray(timerState.recent) ? timerState.recent : [];
@@ -202,19 +198,20 @@ function updateTrayMenu() {
     }
   }
   items.push({ type: "separator" });
-  // Up to 5 projects as a FLAT list in the main view (most-recent first, then
-  // filled from the rest). Anything beyond 5 drops into a "More projects"
-  // submenu. Each opens its Production / Meetings & training submenu.
+  // Flat "Group · Timer" list (Leon 2026-06-14): every project's built-in
+  // buckets + named timers, each a direct one-click start. Recent projects
+  // float to the top; beyond 8 entries spill into a "More timers" submenu.
   if (projects.length > 0) {
+    const byId2 = new Map(projects.map((p) => [p.id, p]));
     const recentIds = new Set(recent.map((p) => p.id));
+    const recentFull = recent.map((r) => byId2.get(r.id)).filter(Boolean);
     const rest = projects.filter((p) => !recentIds.has(p.id));
-    const mainList = [...recent, ...rest].slice(0, 5);
-    const mainIds = new Set(mainList.map((p) => p.id));
-    const overflow = projects.filter((p) => !mainIds.has(p.id));
-    items.push({ label: timerState.running ? "Switch to" : "Projects", enabled: false });
-    for (const pr of mainList) items.push({ label: pr.name, submenu: catSub(pr) });
-    if (overflow.length > 0) {
-      items.push({ label: "More projects", submenu: overflow.map((pr) => ({ label: pr.name, submenu: catSub(pr) })) });
+    const allEntries = [...recentFull, ...rest].flatMap((pr) => entriesFor(pr));
+    items.push({ label: timerState.running ? "Switch to" : "Timers", enabled: false });
+    const MAIN = 8;
+    for (const e of allEntries.slice(0, MAIN)) items.push(e);
+    if (allEntries.length > MAIN) {
+      items.push({ label: "More timers", submenu: allEntries.slice(MAIN) });
     }
   } else {
     items.push({ label: "No projects assigned", enabled: false });
