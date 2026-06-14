@@ -1,7 +1,7 @@
 {
   "name": "pufflabs-desktop",
   "productName": "PuffLabs",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "PuffLabs Communications — cross-platform desktop app (macOS + Windows; thin shell around the live site)",
   "main": "main.js",
   "scripts": {
