@@ -6,11 +6,11 @@ const { createClient } = require("@supabase/supabase-js");
 const SUPABASE_URL = "https://ogubjsuqdsbdewhwlkit.supabase.co";
 const SUPABASE_ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ndWJqc3VxZHNiZGV3aHdsa2l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MDgxNjIsImV4cCI6MjA5NDQ4NDE2Mn0.YPh-jc0VCf_QYk9v6EbhLNL7wssne-MWR75y7VTkEik";
-const APP_URL = "https://www.pufflabs.work/communications";
-const HOME_ORIGIN = "https://www.pufflabs.work";
+const APP_URL = "https://www.elitor.ai/communications";
+const HOME_ORIGIN = "https://www.elitor.ai";
 const SCHEME = "pufflabs";
-const UPDATE_URL = "https://www.pufflabs.work/desktop/latest.json"; // {version,url}
-const DOWNLOAD_PAGE = "https://www.pufflabs.work/download";
+const UPDATE_URL = "https://www.elitor.ai/desktop/latest.json"; // {version,url}
+const DOWNLOAD_PAGE = "https://www.elitor.ai/download";
 
 const IS_MAC = process.platform === "darwin";
 const IS_WIN = process.platform === "win32";
