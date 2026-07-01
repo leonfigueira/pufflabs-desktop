@@ -1,7 +1,7 @@
 {
   "name": "elitor-desktop",
   "productName": "Elitor",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Elitor Communications — cross-platform desktop app (macOS + Windows; thin shell around the live site)",
   "main": "main.js",
   "scripts": {
